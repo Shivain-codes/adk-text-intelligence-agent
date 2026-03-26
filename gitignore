@@ -1,0 +1,14 @@
+# Python virtual environment
+.venv/
+
+# Secrets and environment variables
+.env
+
+# Python cache/artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
