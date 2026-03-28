@@ -1,6 +1,6 @@
 # 🤖 ADK Text Intelligence Agent
 
-> A production-ready AI agent built with **Google ADK** + **Gemini 2.0 Flash**, deployable to **Cloud Run** in minutes.
+> A production-ready AI agent built with **Google ADK** + **gemini-2.5-flash-preview-04-17**, deployable to **Cloud Run** in minutes.
 
 [![Google ADK](https://img.shields.io/badge/Google%20ADK-1.2.1-4285F4?logo=google&logoColor=white)](https://google.github.io/adk-docs/)
 [![Gemini](https://img.shields.io/badge/Gemini-2.0%20Flash-34A853?logo=google&logoColor=white)](https://ai.google.dev/)
@@ -14,7 +14,7 @@
 | Property | Value |
 |----------|-------|
 | **Framework** | Google Agent Development Kit (ADK) v1.2.1 |
-| **Model** | Gemini 2.0 Flash (via LiteLLM) |
+| **Model** | gemini-2.5-flash-preview-04-17 (via LiteLLM) |
 | **Capability** | Text Summarization + Classification |
 | **Server** | FastAPI + Uvicorn |
 | **Deployment** | Google Cloud Run (containerized) |
@@ -42,7 +42,7 @@ HTTP Request
 ┌─────────────────────────────────┐
 │      root_agent (Agent)         │  ← agent.py
 │   name: text_intelligence_agent │
-│   model: gemini-2.0-flash       │
+│   model:gemini-2.5-flash-preview-04-17       │
 │   tools: [summarize, classify]  │
 └──────────────┬──────────────────┘
                │
