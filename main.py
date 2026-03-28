@@ -93,7 +93,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ADK Text Intelligence Agent",
-    description="Text summarization and classification via Google ADK + Gemini 2.0 Flash",
+    description="Text summarization and classification via Google ADK + Gemini-2.5-flash",
     version="1.0.0",
     lifespan=lifespan,
 )
