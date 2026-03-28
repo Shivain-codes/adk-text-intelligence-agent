@@ -112,7 +112,7 @@ async def root():
     return {
         "agent": root_agent.name,
         "status": "running",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-2.5-flash",
         "endpoints": {
             "summarize": "POST /summarize",
             "classify":  "POST /classify",
