@@ -60,14 +60,14 @@ runner = Runner(
 
 async def run_agent(message: str, session_id: str) -> str:
     """Run the ADK agent and return the final text response."""
-    # Ensure session exists
-    existing = session_service.get_session(
-        app_name=APP_NAME, user_id=USER_ID, session_id=session_id
-    )
-    if not existing:
+    # Always create a fresh session - avoids lookup errors
+    try:
         session_service.create_session(
             app_name=APP_NAME, user_id=USER_ID, session_id=session_id
         )
+    except Exception:
+        pass  # Session already exists, continue
+ 
 
     content = genai_types.Content(
         role="user",
