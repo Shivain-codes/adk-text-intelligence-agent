@@ -1,9 +1,10 @@
 """
 FastAPI HTTP server for the ADK Text Intelligence Agent.
-Exposes /summarize and /classify endpoints callable via HTTP.
+Exposes /summarize, /classify, /chat, /health endpoints.
 """
 
 import os
+import uuid
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -23,49 +24,47 @@ from agent import root_agent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Request / Response Schemas ─────────────────────────────────────────────────
+# ── Schemas ────────────────────────────────────────────────────────────────────
 
 class SummarizeRequest(BaseModel):
-    text: str = Field(..., min_length=5, description="Text to summarize")
-    style: Optional[str] = Field(
-        "concise",
-        description="Summary style: 'concise', 'detailed', or 'bullets'"
-    )
+    text: str = Field(..., min_length=5)
+    style: Optional[str] = Field("concise")
 
 class ClassifyRequest(BaseModel):
-    text: str = Field(..., min_length=5, description="Text to classify")
+    text: str = Field(..., min_length=5)
 
 class AgentRequest(BaseModel):
-    message: str = Field(..., description="Free-form message to the agent")
-    session_id: Optional[str] = Field(None, description="Optional session ID")
+    message: str
+    session_id: Optional[str] = None
 
 class AgentResponse(BaseModel):
     response: str
     session_id: str
     agent_name: str
 
-# ── ADK Setup ──────────────────────────────────────────────────────────────────
+# ── Core runner function ───────────────────────────────────────────────────────
 
-APP_NAME = "text-intelligence-agent"
-USER_ID  = "http-user"
+async def run_agent(message: str) -> str:
+    """
+    Creates a brand new session + runner for every request.
+    Completely avoids session-not-found errors.
+    """
+    session_id = uuid.uuid4().hex
+    app_name   = "agent-app"
+    user_id    = "user"
 
-session_service = InMemorySessionService()
-runner = Runner(
-    agent=root_agent,
-    app_name=APP_NAME,
-    session_service=session_service,
-)
-
-# ── Core Agent Runner ──────────────────────────────────────────────────────────
-
-async def run_agent(message: str, session_id: str) -> str:
-    """Run the ADK agent and return the final text response."""
-
-    # Always create a fresh session — never check if it exists first
-    session_service.create_session(
-        app_name=APP_NAME,
-        user_id=USER_ID,
+    # Fresh service + runner per request — no shared state
+    svc = InMemorySessionService()
+    svc.create_session(
+        app_name=app_name,
+        user_id=user_id,
         session_id=session_id,
+    )
+
+    r = Runner(
+        agent=root_agent,
+        app_name=app_name,
+        session_service=svc,
     )
 
     content = genai_types.Content(
@@ -74,8 +73,8 @@ async def run_agent(message: str, session_id: str) -> str:
     )
 
     final_response = ""
-    async for event in runner.run_async(
-        user_id=USER_ID,
+    async for event in r.run_async(
+        user_id=user_id,
         session_id=session_id,
         new_message=content,
     ):
@@ -88,17 +87,17 @@ async def run_agent(message: str, session_id: str) -> str:
 
     return final_response.strip() or "No response generated."
 
-# ── FastAPI App ────────────────────────────────────────────────────────────────
+# ── App ────────────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Agent starting up...")
+    logger.info("ADK Text Intelligence Agent starting...")
     yield
     logger.info("Agent shutting down.")
 
 app = FastAPI(
     title="ADK Text Intelligence Agent",
-    description="AI-powered text summarization and classification using Google ADK + Gemini",
+    description="Text summarization and classification using Google ADK + Gemini 2.0 Flash",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -110,9 +109,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Endpoints ──────────────────────────────────────────────────────────────────
+# ── Routes ─────────────────────────────────────────────────────────────────────
 
-@app.get("/", tags=["Health"])
+@app.get("/")
 async def root():
     return {
         "agent": root_agent.name,
@@ -127,65 +126,55 @@ async def root():
         },
     }
 
-@app.get("/health", tags=["Health"])
+@app.get("/health")
 async def health():
     return {"status": "healthy", "agent": root_agent.name}
 
-@app.post("/summarize", response_model=AgentResponse, tags=["Agent"])
+@app.post("/summarize", response_model=AgentResponse)
 async def summarize(req: SummarizeRequest):
-    """Summarize any text. Style: concise | detailed | bullets"""
-    import uuid
-    session_id = f"s-{uuid.uuid4().hex}"
-    message = (
-        f"Please summarize the following text in a '{req.style}' style:\n\n{req.text}"
-    )
+    """Summarize text. Style: concise | detailed | bullets"""
+    message = f"Summarize the following text in '{req.style}' style:\n\n{req.text}"
     try:
-        response = await run_agent(message, session_id)
+        response = await run_agent(message)
         return AgentResponse(
             response=response,
-            session_id=session_id,
+            session_id=uuid.uuid4().hex,
             agent_name=root_agent.name,
         )
     except Exception as e:
         logger.error(f"Summarize error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/classify", response_model=AgentResponse, tags=["Agent"])
+@app.post("/classify", response_model=AgentResponse)
 async def classify(req: ClassifyRequest):
-    """Classify the topic/domain of any text."""
-    import uuid
-    session_id = f"c-{uuid.uuid4().hex}"
-    message = (
-        f"Please classify the following text and tell me its topic/category:\n\n{req.text}"
-    )
+    """Classify the topic/domain of text."""
+    message = f"Classify the topic of this text:\n\n{req.text}"
     try:
-        response = await run_agent(message, session_id)
+        response = await run_agent(message)
         return AgentResponse(
             response=response,
-            session_id=session_id,
+            session_id=uuid.uuid4().hex,
             agent_name=root_agent.name,
         )
     except Exception as e:
         logger.error(f"Classify error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/chat", response_model=AgentResponse, tags=["Agent"])
+@app.post("/chat", response_model=AgentResponse)
 async def chat(req: AgentRequest):
     """Free-form conversation with the agent."""
-    import uuid
-    session_id = req.session_id or f"ch-{uuid.uuid4().hex}"
     try:
-        response = await run_agent(req.message, session_id)
+        response = await run_agent(req.message)
         return AgentResponse(
             response=response,
-            session_id=session_id,
+            session_id=uuid.uuid4().hex,
             agent_name=root_agent.name,
         )
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ── Entry Point ────────────────────────────────────────────────────────────────
+# ── Entry ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
