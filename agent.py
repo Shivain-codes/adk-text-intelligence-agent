@@ -76,7 +76,7 @@ def classify_text(text: str) -> dict:
 
 root_agent = Agent(
     name="text_intelligence_agent",
-    model=LiteLlm(model="gemini/gemini-2.5-flash-preview-04-17"),
+    model=LiteLlm(model="gemini/gemini-2.5-flash"),
     description=(
         "An AI agent that summarizes text and classifies its topic. "
         "Provide any text and choose a summary style: concise, detailed, or bullets."
