@@ -1,6 +1,6 @@
 """
 FastAPI HTTP server for the ADK Text Intelligence Agent.
-Exposes /summarize, /classify, /chat, /health endpoints.
+Uses await for all async ADK session calls.
 """
 
 import os
@@ -20,7 +20,6 @@ from google.genai import types as genai_types
 
 from agent import root_agent
 
-# ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -42,20 +41,18 @@ class AgentResponse(BaseModel):
     session_id: str
     agent_name: str
 
-# ── Core runner function ───────────────────────────────────────────────────────
+# ── Core runner ────────────────────────────────────────────────────────────────
 
 async def run_agent(message: str) -> str:
-    """
-    Creates a brand new session + runner for every request.
-    Completely avoids session-not-found errors.
-    """
+    """Fresh session + runner per request. All ADK calls awaited."""
     session_id = uuid.uuid4().hex
     app_name   = "agent-app"
     user_id    = "user"
 
-    # Fresh service + runner per request — no shared state
     svc = InMemorySessionService()
-    svc.create_session(
+
+    # create_session is async — must be awaited
+    await svc.create_session(
         app_name=app_name,
         user_id=user_id,
         session_id=session_id,
@@ -93,11 +90,10 @@ async def run_agent(message: str) -> str:
 async def lifespan(app: FastAPI):
     logger.info("ADK Text Intelligence Agent starting...")
     yield
-    logger.info("Agent shutting down.")
 
 app = FastAPI(
     title="ADK Text Intelligence Agent",
-    description="Text summarization and classification using Google ADK + Gemini 2.0 Flash",
+    description="Text summarization and classification via Google ADK + Gemini 2.0 Flash",
     version="1.0.0",
     lifespan=lifespan,
 )
