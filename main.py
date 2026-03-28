@@ -4,8 +4,6 @@ Exposes /summarize and /classify endpoints callable via HTTP.
 """
 
 import os
-import json
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -28,28 +26,28 @@ logger = logging.getLogger(__name__)
 # ── Request / Response Schemas ─────────────────────────────────────────────────
 
 class SummarizeRequest(BaseModel):
-    text: str = Field(..., min_length=10, description="Text to summarize (min 10 chars)")
+    text: str = Field(..., min_length=5, description="Text to summarize")
     style: Optional[str] = Field(
         "concise",
         description="Summary style: 'concise', 'detailed', or 'bullets'"
     )
 
 class ClassifyRequest(BaseModel):
-    text: str = Field(..., min_length=10, description="Text to classify (min 10 chars)")
+    text: str = Field(..., min_length=5, description="Text to classify")
 
 class AgentRequest(BaseModel):
     message: str = Field(..., description="Free-form message to the agent")
-    session_id: Optional[str] = Field(None, description="Optional session ID for context")
+    session_id: Optional[str] = Field(None, description="Optional session ID")
 
 class AgentResponse(BaseModel):
     response: str
     session_id: str
     agent_name: str
 
-# ── ADK Runner Setup ───────────────────────────────────────────────────────────
+# ── ADK Setup ──────────────────────────────────────────────────────────────────
 
-APP_NAME  = "text-intelligence-agent"
-USER_ID   = "http-user"
+APP_NAME = "text-intelligence-agent"
+USER_ID  = "http-user"
 
 session_service = InMemorySessionService()
 runner = Runner(
@@ -58,16 +56,17 @@ runner = Runner(
     session_service=session_service,
 )
 
+# ── Core Agent Runner ──────────────────────────────────────────────────────────
+
 async def run_agent(message: str, session_id: str) -> str:
     """Run the ADK agent and return the final text response."""
-    # Always create a fresh session - avoids lookup errors
-    try:
-        session_service.create_session(
-            app_name=APP_NAME, user_id=USER_ID, session_id=session_id
-        )
-    except Exception:
-        pass  # Session already exists, continue
- 
+
+    # Always create a fresh session — never check if it exists first
+    session_service.create_session(
+        app_name=APP_NAME,
+        user_id=USER_ID,
+        session_id=session_id,
+    )
 
     content = genai_types.Content(
         role="user",
@@ -83,19 +82,19 @@ async def run_agent(message: str, session_id: str) -> str:
         if event.is_final_response():
             if event.content and event.content.parts:
                 final_response = "".join(
-                    p.text for p in event.content.parts if hasattr(p, "text") and p.text
+                    p.text for p in event.content.parts
+                    if hasattr(p, "text") and p.text
                 )
+
     return final_response.strip() or "No response generated."
 
 # ── FastAPI App ────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Text Intelligence Agent starting up...")
-    logger.info(f"   Agent: {root_agent.name}")
-    logger.info(f"   Model: gemini-2.0-flash")
+    logger.info("Agent starting up...")
     yield
-    logger.info("🛑 Agent shutting down.")
+    logger.info("Agent shutting down.")
 
 app = FastAPI(
     title="ADK Text Intelligence Agent",
@@ -134,14 +133,12 @@ async def health():
 
 @app.post("/summarize", response_model=AgentResponse, tags=["Agent"])
 async def summarize(req: SummarizeRequest):
-    """
-    Summarize any text.
-
-    - **text**: The content to summarize
-    - **style**: `concise` (default) | `detailed` | `bullets`
-    """
-    session_id = f"summarize-{abs(hash(req.text[:50]))}"
-    message = f"Please summarize the following text in a '{req.style}' style:\n\n{req.text}"
+    """Summarize any text. Style: concise | detailed | bullets"""
+    import uuid
+    session_id = f"s-{uuid.uuid4().hex}"
+    message = (
+        f"Please summarize the following text in a '{req.style}' style:\n\n{req.text}"
+    )
     try:
         response = await run_agent(message, session_id)
         return AgentResponse(
@@ -155,13 +152,12 @@ async def summarize(req: SummarizeRequest):
 
 @app.post("/classify", response_model=AgentResponse, tags=["Agent"])
 async def classify(req: ClassifyRequest):
-    """
-    Classify the topic/domain of any text.
-
-    Returns category, confidence level, and reasoning.
-    """
-    session_id = f"classify-{abs(hash(req.text[:50]))}"
-    message = f"Please classify the following text and tell me its topic/category:\n\n{req.text}"
+    """Classify the topic/domain of any text."""
+    import uuid
+    session_id = f"c-{uuid.uuid4().hex}"
+    message = (
+        f"Please classify the following text and tell me its topic/category:\n\n{req.text}"
+    )
     try:
         response = await run_agent(message, session_id)
         return AgentResponse(
@@ -175,12 +171,9 @@ async def classify(req: ClassifyRequest):
 
 @app.post("/chat", response_model=AgentResponse, tags=["Agent"])
 async def chat(req: AgentRequest):
-    """
-    Free-form conversation with the agent.
-
-    Supports multi-turn via optional `session_id`.
-    """
-    session_id = req.session_id or f"chat-{abs(hash(req.message[:50]))}"
+    """Free-form conversation with the agent."""
+    import uuid
+    session_id = req.session_id or f"ch-{uuid.uuid4().hex}"
     try:
         response = await run_agent(req.message, session_id)
         return AgentResponse(
